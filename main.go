@@ -1,19 +1,13 @@
 package main
 
 import (
-	cryptoRand "crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
-	"os/exec"
-	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -47,15 +41,20 @@ var remoteAccessKey string
 var manageUrl string
 var remoteAccessUrl string
 var msgList = make([]*MsgType, 0)
-var mimeTypeTable = map[string]string{
-	".pdf": "application/pdf",
-}
 
 func sendAPIResponse(v interface{}, resp http.ResponseWriter) {
 	buf, _ := json.Marshal(v)
 	resp.Write(buf)
 }
 
+func afterMsgDeleted(m *MsgType) {
+	if m == nil {
+		return
+	}
+	if m.data != nil {
+		eraseByteSlice(m.data)
+	}
+}
 func handleAPI(resp http.ResponseWriter, req *http.Request) {
 	var canRemoteAccess = false
 	var canManage = false
@@ -126,6 +125,22 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		globalDataLock.Unlock()
 
 		fmt.Fprintf(resp, retCodeTemplate, 0)
+	} else if path == "/api/delete" {
+		id, _ := strconv.ParseUint(urlQuery.Get("id"), 10, 31)
+		var msgToDelete *MsgType
+		globalDataLock.Lock()
+		for i, m := range msgList {
+			if m.ID == uint32(id) {
+				msgToDelete = m
+				msgList = append(msgList[:i], msgList[i+1:]...)
+				break
+			}
+		}
+		globalDataLock.Unlock()
+		if msgToDelete != nil {
+			afterMsgDeleted(msgToDelete)
+		}
+		fmt.Fprintf(resp, retCodeTemplate, 0)
 	} else if path == "/api/download" {
 		isPreview := false
 		if urlQuery.Get("p") == "1" {
@@ -174,19 +189,6 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// Get preferred outbound ip of this machine
-func getMyIpAddress() net.IP {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-
-	return localAddr.IP
-}
-
 func main() {
 
 	manageKey = encodeBytesToHexString(genRandBytes(16))
@@ -204,65 +206,12 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:           "0.0.0.0:8042",
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
+		ReadTimeout:    1440 * time.Minute,
+		WriteTimeout:   1440 * time.Minute,
 		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 		Handler:        serveMux,
 	}
 
 	log.Fatal(httpServer.ListenAndServe())
-}
-
-func encodeBytesToHexString(b []byte) string {
-	return hex.EncodeToString(b)
-}
-
-func encodeBytesToBinaryString(b []byte) string {
-	return string(b)
-}
-
-func genRandBytes(l int) []byte {
-	ret := make([]byte, l)
-	_, err := cryptoRand.Read(ret)
-	if err != nil {
-		return nil
-	}
-	return ret
-}
-
-func eraseByteSlice(b []byte) {
-	if b == nil {
-		return
-	}
-	l := len(b)
-	for i := 0; i < l; i++ {
-		b[i] = 0xcc
-	}
-}
-
-func startBrowser(url string) error {
-	var err error
-
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", url).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
-		err = exec.Command("open", url).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-	return err
-}
-
-func getMimeTypeByFileName(fileName string) string {
-	f := strings.ToLower(fileName)
-	for k, v := range mimeTypeTable {
-		if strings.HasSuffix(f, k) {
-			return v
-		}
-	}
-	return "application/octet-stream"
 }

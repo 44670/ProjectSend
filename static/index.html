@@ -22,9 +22,9 @@
         <div class="row">
             <div class="form-group col-md" id="joinGuide" hidden>
                 Join Guide:<br>
-                QR: <br><canvas id="joinQR"></canvas><br>
+                QR(contains password): <br><canvas id="joinQR"></canvas><br>
                 URL: <input class="form-control" id="joinUrl" readonly>
-                AccessKey: <input class="form-control" id="joinAK" readonly>
+                Password: <input class="form-control" id="joinAK" readonly>
             </div>
             <div class="form-group col-md">
                 <textarea class="form-control" id="sendText" rows="3"
@@ -50,7 +50,7 @@
 
         <div class="row" hidden>
             <div class="col-md" id="textMsgTemplate">
-                
+
                 <textarea class="form-control msgText" style="height: 100px" readonly>MsgText</textarea><br>
                 <div class="btn-group" role="group">
                     <button type="button" class="btn btn-outline-primary msgCopyButton" style="width:8em;">Copy</button>
@@ -59,11 +59,10 @@
                 <hr>
             </div>
             <div class="col-md" id="fileMsgTemplate">
-                
+
                 <div style="height: 100px" class="msgText">FileName</div><br>
                 <div class="btn-group" role="group">
-                    <a class="btn btn-outline-primary previewUrl" href="#" style="width:8em;"
-                        role="button">Preview</a>
+                    <a class="btn btn-outline-primary previewUrl" href="#" style="width:8em;" role="button">Preview</a>
                     <a class="btn btn-outline-primary downloadUrl" href="#" style="width:8em;"
                         role="button">Download</a>
                     <button type="button" class="btn btn-outline-danger msgDeleteButton">Delete</button>
@@ -79,15 +78,36 @@
         var hasAuthOK = false
         var joinData
         var uploadTaskCount = 0
+        var uploadTasks = {}
         var currentMsgList = []
+
+
+
+        function handleDropPasteItems(items) {
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i]
+                if (item.kind != 'file') {
+                    continue
+                }
+                console.log(item)
+                var file = item.getAsFile()
+                startUploadTask(file)
+            }
+        }
 
         function copyBtnClick(e) {
             e.target.parentElement.parentElement.getElementsByClassName('msgText')[0].select()
             document.execCommand('copy')
-        }   
+        }
 
         function deleteBtnClick(e) {
-
+            var msgText = e.target.parentElement.parentElement.getElementsByClassName('msgText')[0]
+            var text = msgText.value || msgText.innerText
+            if (confirm('Delete "' + text + '"? \n (Delete a downloading file will corrupt the file.)')) {
+                var id = e.target.parentElement.parentElement.getAttribute('data-id')
+                console.log('Delete', id)
+                $.post('/api/delete?id=' + id)
+            }
         }
 
         function setAccessKey(ak) {
@@ -131,12 +151,12 @@
                 if (currentMsgList[currentPos].id != newId) {
                     // a message have been deleted in the server
                     console.log('Remove msg', currentMsgList[currentPos].id)
-                    var deletedMsg = currentMsgList.splice(currentPos, 1)
+                    var deletedMsg = currentMsgList.splice(currentPos, 1)[0]
                     deletedMsg.div.remove()
                 } else {
                     // matched, go on next message
-                    newPos ++
-                    currentPos ++
+                    newPos++
+                    currentPos++
                 }
             }
             while (newPos < newMsgList.length) {
@@ -158,12 +178,13 @@
                     div.getElementsByClassName('msgText')[0].innerText = msg.text
                     div.getElementsByClassName('downloadUrl')[0].href = '/api/download?k=' + msg.key
                     div.getElementsByClassName('previewUrl')[0].href = '/api/download?p=1&k=' + msg.key
+                    div.getElementsByClassName('msgDeleteButton')[0].onclick = deleteBtnClick
                 }
                 msg.div = div
                 document.getElementById('msgList').prepend(div)
                 currentMsgList.push(msg)
-                newPos ++
-                
+                newPos++
+
             }
         }
 
@@ -175,7 +196,7 @@
                 success: function (data) {
                     var o = tryParseJSON(data)
                     if (o.ret == -1) {
-                        var ak = prompt('Enter Access Key')
+                        var ak = prompt('Enter password')
                         if (ak) {
                             setAccessKey(ak)
                         }
@@ -230,6 +251,25 @@
 
 
         $(function () {
+            var sendText = document.getElementById('sendText')
+
+            sendText.onpaste = function (e) {
+                var items = e.clipboardData.items
+                handleDropPasteItems(items)
+            }
+
+            sendText.ondrop = function (e) {
+                // Prevent default behavior (Prevent file from being opened)
+                e.preventDefault()
+                var items = e.dataTransfer.items
+                handleDropPasteItems(items)
+
+            }
+            sendText.ondragover = function (e) {
+                // Prevent default behavior (Prevent file from being opened)
+                e.preventDefault();
+            }
+
             fetchMsgList()
             setInterval(fetchMsgList, 5000)
             $('#sendButton').click(function () {
