@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="/css/bootstrap.min.css" crossorigin="anonymous">
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="/js/jquery-3.3.1.min.js" crossorigin="anonymous"></script>
+    <script src="/js/popper.min.js" crossorigin="anonymous"></script>
+    <script src="/js/bootstrap.min.js" crossorigin="anonymous"></script>
+    <script src="/js/qrcode.min.js" crossorigin="anonymous"></script>
+    <title>ProjectSend</title>
+</head>
+
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="form-group col-md" id="joinGuide" hidden>
+                Join Guide:<br>
+                QR: <br><canvas id="joinQR"></canvas><br>
+                URL: <input class="form-control" id="joinUrl" readonly>
+                AccessKey: <input class="form-control" id="joinAK" readonly>
+            </div>
+            <div class="form-group col-md">
+                <textarea class="form-control" id="sendText" rows="3"
+                    placeholder="Type text, drop file or paste image."></textarea><br>
+                <input class="form-control" type="file" id="sendFile"><br>
+                <div class="row">
+                    <div class="col" hidden>
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0"
+                                aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                    <div class="col"><button id="sendButton" type="button"
+                            class="btn btn-primary btn-block">Send</button></div>
+                </div>
+
+            </div>
+        </div>
+        <hr>
+        <div class="row" id="msgList">
+
+        </div>
+
+        <div class="row" hidden>
+            <div class="col-md" id="textMsgTemplate">
+                
+                <textarea class="form-control msgText" style="height: 100px" readonly>MsgText</textarea><br>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary msgCopyButton" style="width:8em;">Copy</button>
+                    <button type="button" class="btn btn-outline-danger msgDeleteButton">Delete</button>
+                </div>
+                <hr>
+            </div>
+            <div class="col-md" id="fileMsgTemplate">
+                
+                <div style="height: 100px" class="msgText">FileName</div><br>
+                <div class="btn-group" role="group">
+                    <a class="btn btn-outline-primary previewUrl" href="#" style="width:8em;"
+                        role="button">Preview</a>
+                    <a class="btn btn-outline-primary downloadUrl" href="#" style="width:8em;"
+                        role="button">Download</a>
+                    <button type="button" class="btn btn-outline-danger msgDeleteButton">Delete</button>
+                </div>
+                <hr>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+
+        var hasAuthOK = false
+        var joinData
+        var uploadTaskCount = 0
+        var currentMsgList = []
+
+        function copyBtnClick(e) {
+            e.target.parentElement.parentElement.getElementsByClassName('msgText')[0].select()
+            document.execCommand('copy')
+        }   
+
+        function deleteBtnClick(e) {
+
+        }
+
+        function setAccessKey(ak) {
+            document.cookie = 'ak=' + ak
+        }
+
+        if (location.search.startsWith("?ak=")) {
+            setAccessKey((location.search.substring(4).split('&'))[0])
+            try {
+                history.replaceState({}, 'Send', '/')
+            } catch (e) {
+                console.log(e)
+            }
+        }
+
+        function isManagement() {
+            var ak = (document.cookie.split('ak=')[1] || '').split(';')[0]
+            return ak.length == 32
+        }
+
+        function tryParseJSON(s) {
+            try {
+                var o = JSON.parse(s)
+                var retCode = o.ret
+                return o
+            } catch (e) {
+                console.log(e)
+            }
+            return { ret: -1000 }
+        }
+
+        function updateMsgListView(newMsgList) {
+            var currentPos = 0
+            var newPos = 0
+
+            while (currentPos < currentMsgList.length) {
+                var newId = -1
+                if (newMsgList[newPos]) {
+                    newId = newMsgList[newPos].id
+                }
+                if (currentMsgList[currentPos].id != newId) {
+                    // a message have been deleted in the server
+                    console.log('Remove msg', currentMsgList[currentPos].id)
+                    var deletedMsg = currentMsgList.splice(currentPos, 1)
+                    deletedMsg.div.remove()
+                } else {
+                    // matched, go on next message
+                    newPos ++
+                    currentPos ++
+                }
+            }
+            while (newPos < newMsgList.length) {
+                // add the message
+                var msg = newMsgList[newPos]
+                console.log('Add msg', msg)
+                var div = document.createElement('div')
+                div.className = "col-md-6"
+                div.setAttribute('data-id', msg.id)
+                if (msg.type == 0) {
+                    // text
+                    div.innerHTML = $('#textMsgTemplate').html()
+                    div.getElementsByClassName('msgText')[0].value = msg.text
+                    div.getElementsByClassName('msgCopyButton')[0].onclick = copyBtnClick
+                    div.getElementsByClassName('msgDeleteButton')[0].onclick = deleteBtnClick
+                } else if (msg.type == 1) {
+                    // file
+                    div.innerHTML = $('#fileMsgTemplate').html()
+                    div.getElementsByClassName('msgText')[0].innerText = msg.text
+                    div.getElementsByClassName('downloadUrl')[0].href = '/api/download?k=' + msg.key
+                    div.getElementsByClassName('previewUrl')[0].href = '/api/download?p=1&k=' + msg.key
+                }
+                msg.div = div
+                document.getElementById('msgList').prepend(div)
+                currentMsgList.push(msg)
+                newPos ++
+                
+            }
+        }
+
+        function fetchMsgList() {
+            $.ajax({
+                type: 'POST',
+                url: '/api/getMsgList',
+                timeout: 10000,
+                success: function (data) {
+                    var o = tryParseJSON(data)
+                    if (o.ret == -1) {
+                        var ak = prompt('Enter Access Key')
+                        if (ak) {
+                            setAccessKey(ak)
+                        }
+                    }
+                    if (o.ret == 0) {
+                        if (!hasAuthOK) {
+                            hasAuthOK = true
+                            onFirstAuthOK()
+                        }
+                        updateMsgListView(o.data || [])
+                    }
+                }
+            })
+        }
+
+        function updateJoinGuide() {
+            $('#joinUrl').val(joinData.url)
+            $('#joinAK').val(joinData.ak)
+            QRCode.toCanvas(document.getElementById('joinQR'),
+                joinData.url + '?ak=' + joinData.ak, {}, function (error) {
+                    if (error) console.error(error)
+                    console.log('generate QR success!')
+                })
+        }
+
+        function onFirstAuthOK() {
+            if (isManagement()) {
+                document.getElementById('joinGuide').hidden = false
+                $.post('/api/getAccessInfo', function (data) {
+                    var o = tryParseJSON(data)
+                    console.log(o)
+                    joinData = o.data
+                    updateJoinGuide()
+                })
+            }
+        }
+
+        function startUploadTask(file) {
+            uploadTaskCount++
+            var taskID = uploadTaskCount
+            var url = '/api/addFile?name=' + encodeURIComponent(file.name) + '&size=' + file.size
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", url, true);
+            xhr.onload = function (e) {
+                // Uploaded.
+            }
+            xhr.onprogress = function (e) {
+
+            }
+            xhr.send(file);
+        }
+
+
+        $(function () {
+            fetchMsgList()
+            setInterval(fetchMsgList, 5000)
+            $('#sendButton').click(function () {
+                var text = $('#sendText').val()
+                if (text != '') {
+                    $.post("/api/addText", { text: text }, function () {
+                        $('#sendText').val('')
+                    });
+                    return
+                }
+                var fileInput = document.getElementById('sendFile')
+                var file = fileInput.files[0]
+                if (!file) {
+                    return
+                }
+                startUploadTask(file)
+            });
+        })
+
+    </script>
+</body>
+
+</html>
