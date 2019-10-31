@@ -1,0 +1,1 @@
+powershell Start-Process netsh.exe -Verb RunAs -ArgumentList 'advfirewall firewall add rule name=ProjectSend8042 dir=in action=allow protocol=TCP localport=8042'

@@ -1,3 +1,7 @@
+ProjectSend-*
+*.7z
+*.zip
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

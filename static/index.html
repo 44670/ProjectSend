@@ -18,6 +18,10 @@
 </head>
 
 <body>
+    <nav class="navbar navbar-dark bg-primary">
+        <span class="navbar-brand mb-0 h1">Project Send</span>
+    </nav>
+    <br>
     <div class="container">
         <div class="row">
             <div class="form-group col-md" id="joinGuide" hidden>
@@ -80,6 +84,7 @@
         var uploadTaskCount = 0
         var uploadTasks = {}
         var currentMsgList = []
+        var currentFetchXHR
 
 
 
@@ -103,10 +108,12 @@
         function deleteBtnClick(e) {
             var msgText = e.target.parentElement.parentElement.getElementsByClassName('msgText')[0]
             var text = msgText.value || msgText.innerText
-            if (confirm('Delete "' + text + '"? \n (Delete a downloading file will corrupt the file.)')) {
+            if (confirm('Delete "' + text + '"? \n (Delete a downloading file will corrupt the download.)')) {
                 var id = e.target.parentElement.parentElement.getAttribute('data-id')
                 console.log('Delete', id)
-                $.post('/api/delete?id=' + id)
+                $.post('/api/delete?id=' + id, function () {
+                    fetchMsgList(true)
+                })
             }
         }
 
@@ -188,18 +195,32 @@
             }
         }
 
-        function fetchMsgList() {
-            $.ajax({
+        function fetchMsgList(cancelCurrentRequest) {
+            cancelCurrentRequest = cancelCurrentRequest || false
+            if (currentFetchXHR) {
+                if (cancelCurrentRequest) {
+                    currentFetchXHR.abort()
+                } else {
+                    var readyState = currentFetchXHR.readyState
+                    if ((readyState >= 1) && (readyState <= 3)) {
+                        console.log('Waiting previous fetch request', currentFetchXHR)
+                        return
+                    }
+                }
+
+            }
+            currentFetchXHR = $.ajax({
                 type: 'POST',
                 url: '/api/getMsgList',
-                timeout: 10000,
+                timeout: 20000,
                 success: function (data) {
                     var o = tryParseJSON(data)
                     if (o.ret == -1) {
-                        var ak = prompt('Enter password')
+                        var ak = prompt('Enter password: ')
                         if (ak) {
                             setAccessKey(ak)
                         }
+                        fetchMsgList(true)
                     }
                     if (o.ret == 0) {
                         if (!hasAuthOK) {
@@ -208,6 +229,9 @@
                         }
                         updateMsgListView(o.data || [])
                     }
+                },
+                error: function (xhr, textStatus, errorThrown) {
+                    console.log('Ajax error', xhr, textStatus, errorThrown)
                 }
             })
         }
@@ -242,6 +266,7 @@
             xhr.open("POST", url, true);
             xhr.onload = function (e) {
                 // Uploaded.
+                fetchMsgList(true)
             }
             xhr.onprogress = function (e) {
 
@@ -258,25 +283,26 @@
                 handleDropPasteItems(items)
             }
 
-            sendText.ondrop = function (e) {
+            document.ondrop = function (e) {
                 // Prevent default behavior (Prevent file from being opened)
                 e.preventDefault()
                 var items = e.dataTransfer.items
                 handleDropPasteItems(items)
 
             }
-            sendText.ondragover = function (e) {
+            document.ondragover = function (e) {
                 // Prevent default behavior (Prevent file from being opened)
                 e.preventDefault();
             }
 
-            fetchMsgList()
+            fetchMsgList(true)
             setInterval(fetchMsgList, 5000)
             $('#sendButton').click(function () {
                 var text = $('#sendText').val()
                 if (text != '') {
                     $.post("/api/addText", { text: text }, function () {
                         $('#sendText').val('')
+                        fetchMsgList(true)
                     });
                     return
                 }

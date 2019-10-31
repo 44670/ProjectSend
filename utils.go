@@ -13,7 +13,7 @@ import (
 
 // Get preferred outbound ip of this machine
 func getMyIpAddress() net.IP {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	conn, err := net.Dial("udp", "114.114.114.114:80")
 	if err != nil {
 		log.Fatal(err)
 	}

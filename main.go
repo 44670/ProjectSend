@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const ListenAtPort = 8042
+
 const MsgTypeText = 0
 const MsgTypeFile = 1
 
@@ -39,7 +41,6 @@ var idCounter uint32
 var manageKey string
 var remoteAccessKey string
 var manageUrl string
-var remoteAccessUrl string
 var msgList = make([]*MsgType, 0)
 
 func sendAPIResponse(v interface{}, resp http.ResponseWriter) {
@@ -98,7 +99,7 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(resp, retCodeTemplate, 0)
 	} else if path == "/api/addFile" {
 		fileName := urlQuery.Get("name")
-		fileSize, _ := strconv.ParseUint(urlQuery.Get("size"), 10, 31)
+		fileSize, _ := strconv.ParseUint(urlQuery.Get("size"), 10, 36) // 64GB max (should be enough?)
 		if (len(fileName) < 1) || (fileSize < 1) {
 			fmt.Fprintf(resp, retCodeTemplate, -2)
 			return
@@ -170,16 +171,14 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		}
 		resp.Header().Add("Content-Disposition",
 			fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`, contentDispos, url.PathEscape(fileName), url.PathEscape(fileName)))
-		contentType := "application/octet-stream"
-		if isPreview {
-			contentType = getMimeTypeByFileName(fileName)
-		}
+		contentType := getMimeTypeByFileName(fileName)
 		resp.Header().Add("Content-Type", contentType)
+		resp.Header().Add("Content-Length", fmt.Sprintf("%d", len(fileData)))
 		resp.Write(fileData)
 	} else if path == "/api/getAccessInfo" {
 		ai := &AccessInfo{}
 		ai.AccessKey = remoteAccessKey
-		ai.Url = fmt.Sprintf("http://%s:8042/", getMyIpAddress())
+		ai.Url = fmt.Sprintf("http://%s:%d/", getMyIpAddress(), ListenAtPort)
 		sendAPIResponse(&ApiResponse{0, ai}, resp)
 	} else {
 		if !canManage {
@@ -193,8 +192,7 @@ func main() {
 
 	manageKey = encodeBytesToHexString(genRandBytes(16))
 	remoteAccessKey = encodeBytesToHexString(genRandBytes(4))
-	manageUrl = fmt.Sprintf("http://127.0.0.1:8042/?ak=%s", manageKey)
-	remoteAccessUrl = fmt.Sprintf("http://%s:8042/?ak=%s", getMyIpAddress(), remoteAccessKey)
+	manageUrl = fmt.Sprintf("http://127.0.0.1:%d/?ak=%s", ListenAtPort, manageKey)
 
 	fmt.Printf("ManageKey: %s\n", manageKey)
 	fmt.Printf("ManageUrl: %s\n", manageUrl)
@@ -205,7 +203,7 @@ func main() {
 	serveMux.HandleFunc("/api/", handleAPI)
 
 	httpServer := &http.Server{
-		Addr:           "0.0.0.0:8042",
+		Addr:           fmt.Sprintf("0.0.0.0:%d", ListenAtPort),
 		ReadTimeout:    1440 * time.Minute,
 		WriteTimeout:   1440 * time.Minute,
 		IdleTimeout:    120 * time.Second,
