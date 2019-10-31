@@ -74,7 +74,12 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// For better compatibility with some weird browsers, download does not require a cookieAk.
+	if !canRemoteAccess {
+		fmt.Fprintf(resp, retCodeTemplate, -1)
+		return
+	}
+
+	// Currently, download requires a valid cookieAk. This may break some weird browsers.
 	if path == "/api/download" {
 		isPreview := false
 		if urlQuery.Get("p") == "1" {
@@ -109,14 +114,7 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		resp.Header().Add("Content-Length", fmt.Sprintf("%d", len(fileData)))
 		resp.Write(fileData)
 		return
-	}
-
-	if !canRemoteAccess {
-		fmt.Fprintf(resp, retCodeTemplate, -1)
-		return
-	}
-
-	if path == "/api/getMsgList" {
+	} else if path == "/api/getMsgList" {
 		globalDataLock.Lock()
 		sendAPIResponse(&ApiResponse{0, msgList}, resp)
 		globalDataLock.Unlock()

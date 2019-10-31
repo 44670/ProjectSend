@@ -53,9 +53,18 @@
         </div>
 
         <div class="row" hidden>
+            <div class="col-md" id="uploadProgressTemplate">
+                <div class="msgText">FileName</div><br>
+                <div class="progress">
+                    <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0"
+                        aria-valuemax="100"></div>
+                </div><br>
+                <div class="speedText">...</div>
+                <hr>
+            </div>
             <div class="col-md" id="textMsgTemplate">
 
-                <textarea class="form-control msgText" style="height: 100px" readonly>MsgText</textarea><br>
+                <textarea class="form-control msgText" style="height: 70px" readonly>MsgText</textarea><br>
                 <div class="btn-group" role="group">
                     <button type="button" class="btn btn-outline-primary msgCopyButton" style="width:8em;">Copy</button>
                     <button type="button" class="btn btn-outline-danger msgDeleteButton">Delete</button>
@@ -64,7 +73,7 @@
             </div>
             <div class="col-md" id="fileMsgTemplate">
 
-                <div style="height: 100px" class="msgText">FileName</div><br>
+                <div style="height: 70px;"  class="msgText">FileName</div><br>
                 <div class="btn-group" role="group">
                     <a class="btn btn-outline-primary previewUrl" href="#" style="width:8em;" role="button">Preview</a>
                     <a class="btn btn-outline-primary downloadUrl" href="#" style="width:8em;"
@@ -273,6 +282,17 @@
             var taskID = uploadTaskCount
             var url = '/api/addFile?name=' + encodeURIComponent(file.name) + '&size=' + file.size
             var xhr = new XMLHttpRequest();
+            var prevUploadBytes = 0
+            var prevTimestamp = 0
+            var div = document.createElement('div')
+            div.className = "col-md-6"
+            div.innerHTML = $('#uploadProgressTemplate').html()
+            div.getElementsByClassName('msgText')[0].innerText = file.name
+            var progressDiv = div.getElementsByClassName('progress-bar')[0]
+            var speedTextDiv = div.getElementsByClassName('speedText')[0]
+            var msgList = document.getElementById('msgList')
+            msgList.insertBefore(div, msgList.childNodes[0] || null)
+
             xhr.open("POST", url, true);
             xhr.onload = function (e) {
                 var fileInput = document.getElementById('sendFile')
@@ -281,6 +301,34 @@
                 }
                 // Uploaded.
                 fetchMsgList(true)
+                div.remove()
+            }
+            xhr.upload.onprogress = function (e) {
+                console.log(e)
+                var newTimestamp = e.timeStamp
+                var newUploadBytes = e.loaded
+                var totalBytes = e.total
+                if (prevTimestamp != 0) {
+                    var timeDiff = newTimestamp - prevTimestamp
+                    if (timeDiff > 1000) {
+                        var speed = ((newUploadBytes - prevUploadBytes) / timeDiff) * 1000
+                        var t = ~~(speed / 1000000 * 10)
+                        var speedString = '' + ~~(t / 10) + '.' + (t % 10) + 'MB/s'
+                        console.log(speed, speedString)
+                        speedTextDiv.innerText = speedString
+                        prevTimestamp = newTimestamp
+                        prevUploadBytes = newUploadBytes
+                    }
+                } else {
+                    prevTimestamp = newTimestamp
+                    prevUploadBytes = newUploadBytes
+                }
+
+                if (totalBytes != 0) {
+                    var progress = ~~((newUploadBytes / totalBytes) * 100)
+                    console.log(progress)
+                    progressDiv.setAttribute('style', 'width: ' + progress + '%')
+                }
             }
             xhr.onprogress = function (e) {
 
@@ -326,7 +374,7 @@
                 }
                 startUploadTask(file)
                 $('#sendButton').prop('disabled', true)
-                setTimeout(function() {
+                setTimeout(function () {
                     $('#sendButton').prop('disabled', false)
                 }, 500)
             });
