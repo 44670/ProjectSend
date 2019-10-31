@@ -79,6 +79,15 @@
 
     <script>
 
+        if (!String.prototype.startsWith) {
+            Object.defineProperty(String.prototype, 'startsWith', {
+                value: function (search, rawPos) {
+                    var pos = rawPos > 0 ? rawPos | 0 : 0;
+                    return this.substring(pos, pos + search.length) === search;
+                }
+            });
+        }
+
         var hasAuthOK = false
         var joinData
         var uploadTaskCount = 0
@@ -188,7 +197,8 @@
                     div.getElementsByClassName('msgDeleteButton')[0].onclick = deleteBtnClick
                 }
                 msg.div = div
-                document.getElementById('msgList').prepend(div)
+                var msgList = document.getElementById('msgList')
+                msgList.insertBefore(div, msgList.childNodes[0] || null)
                 currentMsgList.push(msg)
                 newPos++
 
@@ -265,6 +275,10 @@
             var xhr = new XMLHttpRequest();
             xhr.open("POST", url, true);
             xhr.onload = function (e) {
+                var fileInput = document.getElementById('sendFile')
+                if (file == fileInput.files[0]) {
+                    fileInput.value = null
+                }
                 // Uploaded.
                 fetchMsgList(true)
             }
@@ -304,7 +318,6 @@
                         $('#sendText').val('')
                         fetchMsgList(true)
                     });
-                    return
                 }
                 var fileInput = document.getElementById('sendFile')
                 var file = fileInput.files[0]
@@ -312,6 +325,10 @@
                     return
                 }
                 startUploadTask(file)
+                $('#sendButton').prop('disabled', true)
+                setTimeout(function() {
+                    $('#sendButton').prop('disabled', false)
+                }, 500)
             });
         })
 

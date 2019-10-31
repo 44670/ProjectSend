@@ -74,6 +74,43 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// For better compatibility with some weird browsers, download does not require a cookieAk.
+	if path == "/api/download" {
+		isPreview := false
+		if urlQuery.Get("p") == "1" {
+			isPreview = true
+		}
+		key := urlQuery.Get("k")
+		if len(key) != 32 {
+			return
+		}
+		globalDataLock.Lock()
+		var fileData []byte
+		var fileName string
+		for _, msg := range msgList {
+			if msg.Key == key {
+				fileData = msg.data
+				fileName = msg.Text
+				break
+			}
+		}
+		globalDataLock.Unlock()
+		if fileData == nil {
+			return
+		}
+		contentDispos := "attachment"
+		if isPreview {
+			contentDispos = "inline"
+		}
+		resp.Header().Add("Content-Disposition",
+			fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`, contentDispos, url.PathEscape(fileName), url.PathEscape(fileName)))
+		contentType := getMimeTypeByFileName(fileName)
+		resp.Header().Add("Content-Type", contentType)
+		resp.Header().Add("Content-Length", fmt.Sprintf("%d", len(fileData)))
+		resp.Write(fileData)
+		return
+	}
+
 	if !canRemoteAccess {
 		fmt.Fprintf(resp, retCodeTemplate, -1)
 		return
@@ -142,39 +179,6 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 			afterMsgDeleted(msgToDelete)
 		}
 		fmt.Fprintf(resp, retCodeTemplate, 0)
-	} else if path == "/api/download" {
-		isPreview := false
-		if urlQuery.Get("p") == "1" {
-			isPreview = true
-		}
-		key := urlQuery.Get("k")
-		if len(key) != 32 {
-			return
-		}
-		globalDataLock.Lock()
-		var fileData []byte
-		var fileName string
-		for _, msg := range msgList {
-			if msg.Key == key {
-				fileData = msg.data
-				fileName = msg.Text
-				break
-			}
-		}
-		globalDataLock.Unlock()
-		if fileData == nil {
-			return
-		}
-		contentDispos := "attachment"
-		if isPreview {
-			contentDispos = "inline"
-		}
-		resp.Header().Add("Content-Disposition",
-			fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`, contentDispos, url.PathEscape(fileName), url.PathEscape(fileName)))
-		contentType := getMimeTypeByFileName(fileName)
-		resp.Header().Add("Content-Type", contentType)
-		resp.Header().Add("Content-Length", fmt.Sprintf("%d", len(fileData)))
-		resp.Write(fileData)
 	} else if path == "/api/getAccessInfo" {
 		ai := &AccessInfo{}
 		ai.AccessKey = remoteAccessKey
