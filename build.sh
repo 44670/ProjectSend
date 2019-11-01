@@ -1,9 +1,7 @@
 #!/bin/sh
-GOARCH=386 GOOS=windows 
+export GOARCH=amd64 GOOS=windows 
 go build -o ProjectSend-$GOOS-$GOARCH.exe
-GOARCH=amd64 GOOS=windows 
-go build -o ProjectSend-$GOOS-$GOARCH.exe
-GOARCH=amd64 GOOS=linux 
+export GOARCH=amd64 GOOS=linux 
 go build -o ProjectSend-$GOOS-$GOARCH
-GOARCH=amd64 GOOS=darwin 
+export GOARCH=amd64 GOOS=darwin 
 go build -o ProjectSend-$GOOS-$GOARCH
