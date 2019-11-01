@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +11,9 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	_ "./statik"
+	"github.com/rakyll/statik/fs"
 )
 
 const ListenAtPort = 8042
@@ -191,6 +195,8 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	flagPtrStatic := flag.String("static", "", "Static resource path")
+	flag.Parse()
 
 	manageKey = encodeBytesToHexString(genRandBytes(16))
 	remoteAccessKey = encodeBytesToHexString(genRandBytes(4))
@@ -198,10 +204,18 @@ func main() {
 
 	fmt.Printf("ManageKey: %s\n", manageKey)
 	fmt.Printf("ManageUrl: %s\n", manageUrl)
-	startBrowser(manageUrl)
 
 	serveMux := http.NewServeMux()
-	serveMux.Handle("/", http.FileServer(http.Dir("static")))
+
+	statikFS, err := fs.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if *flagPtrStatic != "" {
+		serveMux.Handle("/", http.FileServer(http.Dir(*flagPtrStatic)))
+	} else {
+		serveMux.Handle("/", http.FileServer(statikFS))
+	}
 	serveMux.HandleFunc("/api/", handleAPI)
 
 	httpServer := &http.Server{
@@ -212,6 +226,12 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 		Handler:        serveMux,
 	}
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		startBrowser(manageUrl)
+
+	}()
 
 	log.Fatal(httpServer.ListenAndServe())
 }
