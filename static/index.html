@@ -7,17 +7,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
     <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="/css/bootstrap.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="css/bootstrap.min.css" crossorigin="anonymous">
     <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
-    <script src="/js/jquery-3.3.1.min.js" crossorigin="anonymous"></script>
-    <script src="/js/popper.min.js" crossorigin="anonymous"></script>
-    <script src="/js/bootstrap.min.js" crossorigin="anonymous"></script>
-    <script src="/js/qrcode.min.js" crossorigin="anonymous"></script>
+    <script src="js/jquery-3.3.1.min.js"></script>
+    <script src="js/popper.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/qrcode.min.js"></script>
+    <script src="js/pdf.js"></script>
     <title>ProjectSend</title>
 </head>
 
 <body>
+
     <nav class="navbar navbar-dark bg-primary">
         <span class="navbar-brand mb-0 h1">Project Send</span>
     </nav>
@@ -78,6 +80,10 @@
             </div>
         </div>
 
+
+    </div>
+    <div class="play">
+        <canvas id="playCanvas" width="100" height="100"></canvas>
     </div>
 
     <script>
@@ -89,6 +95,15 @@
                     return this.substring(pos, pos + search.length) === search;
                 }
             });
+        }
+
+        if (!String.prototype.endsWith) {
+            String.prototype.endsWith = function (search, this_len) {
+                if (this_len === undefined || this_len > this.length) {
+                    this_len = this.length;
+                }
+                return this.substring(this_len - search.length, this_len) === search;
+            };
         }
 
         var hasAuthOK = false
@@ -129,7 +144,9 @@
         }
 
         function setAccessKey(ak) {
-            document.cookie = 'ak=' + ak
+            var d = new Date()
+            d.setDate(d.getDate() + 7)
+            document.cookie = 'ak=' + ak + ';expires=' + d.toUTCString() + ';path=/'
         }
 
         if (location.search.startsWith("?ak=")) {
@@ -195,7 +212,11 @@
                     div.innerHTML = $('#fileMsgTemplate').html()
                     div.getElementsByClassName('msgText')[0].innerText = msg.text
                     div.getElementsByClassName('downloadUrl')[0].href = '/api/download?k=' + msg.key
-                    div.getElementsByClassName('previewUrl')[0].href = '/api/download?p=1&k=' + msg.key
+                    var previewUrl = '/api/download?p=1&k=' + msg.key
+                    if (msg.text.toLowerCase().endsWith('.pdf')) {
+                        previewUrl = '/viewer.html?file=' + encodeURIComponent(previewUrl)
+                    }
+                    div.getElementsByClassName('previewUrl')[0].href = previewUrl
                     div.getElementsByClassName('msgDeleteButton')[0].onclick = deleteBtnClick
                 }
                 msg.div = div
@@ -347,6 +368,50 @@
             xhr.send(file);
         }
 
+        var playPdf
+        var playCurrentPage
+        var playCanvas
+        var playRenderContext
+        var playScaleMode = 'ppt'
+
+        function playStartPdf(key) {
+            playCanvas = document.getElementById('playCanvas')
+            playCanvas.width = window.innerWidth
+            playCanvas.height = window.innerHeight
+            playPdf = null
+            playCurrentPage = null
+            playRenderContext = {
+                canvasContext: playCanvas.getContext('2d'),
+            }
+            pdfjsLib.getDocument('/api/download?k=' + key).then(function (doc) {
+                console.log('pdf loaded', doc)
+                playPdf = doc
+                playLoadPage(1)
+            })
+        }
+
+        function playRedrawCurrentPage() {
+            if (!playCurrentPage) {
+                return
+            }
+            var scale = 1.0
+            var viewport = playCurrentPage.getViewport({ scale: 1 })
+            scale = playCanvas.width / viewport.width
+            if (viewport.height * scale > playCanvas.height) {
+                scale = playCanvas.height / viewport.height
+            }
+            viewport = playCurrentPage.getViewport({ scale: scale, offsetX: -100 })
+            playRenderContext.viewport = viewport
+            playCurrentPage.render(playRenderContext)
+        }
+
+        function playLoadPage(page) {
+            playPdf.getPage(page).then(function (p) {
+                playCurrentPage = p
+                playRedrawCurrentPage()
+            })
+        }
+
 
         $(function () {
             var sendText = document.getElementById('sendText')
@@ -379,7 +444,7 @@
                     });
                 }
                 var fileInput = document.getElementById('sendFile')
-                
+
                 var files = fileInput.files
                 if (!files[0]) {
                     return

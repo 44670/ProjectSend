@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -78,12 +80,7 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if !canRemoteAccess {
-		fmt.Fprintf(resp, retCodeTemplate, -1)
-		return
-	}
-
-	// Currently, download requires a valid cookieAk. This may break some weird browsers.
+	// Download does not require a valid cookieAk.
 	if path == "/api/download" {
 		isPreview := false
 		if urlQuery.Get("p") == "1" {
@@ -111,14 +108,22 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 		if isPreview {
 			contentDispos = "inline"
 		}
+		resp.Header().Add("Cache-control", "no-store")
 		resp.Header().Add("Content-Disposition",
 			fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`, contentDispos, url.PathEscape(fileName), url.PathEscape(fileName)))
 		contentType := getMimeTypeByFileName(fileName)
 		resp.Header().Add("Content-Type", contentType)
-		resp.Header().Add("Content-Length", fmt.Sprintf("%d", len(fileData)))
-		resp.Write(fileData)
+		rdr := bytes.NewReader(fileData)
+		http.ServeContent(resp, req, fileName, time.Now(), rdr)
 		return
-	} else if path == "/api/getMsgList" {
+	}
+
+	if !canRemoteAccess {
+		fmt.Fprintf(resp, retCodeTemplate, -1)
+		return
+	}
+
+	if path == "/api/getMsgList" {
 		globalDataLock.Lock()
 		sendAPIResponse(&ApiResponse{0, msgList}, resp)
 		globalDataLock.Unlock()
@@ -196,9 +201,13 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 
 func main() {
 	flagPtrStatic := flag.String("static", "", "Static resource path")
+	flagPtrMk := flag.String("mk", "", "ManageKey")
 	flag.Parse()
 
 	manageKey = encodeBytesToHexString(genRandBytes(16))
+	if *flagPtrMk != "" {
+		manageKey = *flagPtrMk
+	}
 	remoteAccessKey = encodeBytesToHexString(genRandBytes(4))
 	manageUrl = fmt.Sprintf("http://127.0.0.1:%d/?ak=%s", ListenAtPort, manageKey)
 
@@ -226,6 +235,10 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 		Handler:        serveMux,
 	}
+
+	mime.AddExtensionType(".css", "text/css; charset=utf-8")
+	mime.AddExtensionType(".html", "text/html; charset=utf-8")
+	mime.AddExtensionType(".js", "application/javascript")
 
 	go func() {
 		time.Sleep(1 * time.Second)
