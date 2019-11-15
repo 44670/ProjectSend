@@ -1,5 +1,5 @@
 #!/bin/sh
-statik -f -src=./static -include=*.jpg,*.txt,*.html,*.css,*.js
+statik -f -src=./static
 
 rm ProjectSend-*
 export GOARCH=386 GOOS=windows
