@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	_ "./statik"
+	_ "github.com/myMod"
 	"github.com/rakyll/statik/fs"
 )
 
