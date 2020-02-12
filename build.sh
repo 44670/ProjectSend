@@ -1,6 +1,10 @@
 #!/bin/sh
 statik -f -src=./static
 
+cp -r statik ..
+cd ../statik && go mod init localMod
+cd ../ProjectSend 
+
 rm ProjectSend-*
 export GOARCH=386 GOOS=windows
 go build -o ProjectSend-$GOOS-$GOARCH.exe
