@@ -28,8 +28,19 @@
         <div class="row">
             <div class="form-group col-md" id="joinGuide" hidden>
                 Join Guide:<br>
-                QR(contains password): <br><canvas id="joinQR"></canvas><br>
+                QR(contains password):
+                <br>
+                <div style="display: inline-flex; flex-direction: column;align-items: center;">
+                    <canvas id="joinQR"></canvas>
+                    <p>IPv4</p>
+                </div>
+                <div style="display: inline-flex; flex-direction: column;align-items: center;">
+                    <canvas id="joinQRV6"></canvas>
+                    <p>IPv6</p>
+                </div>
+                <br>
                 URL: <input class="form-control" id="joinUrl" readonly>
+                URL IPv6: <input class="form-control" id="joinUrlV6" readonly>
                 Password: <input class="form-control" id="joinAK" readonly>
             </div>
             <div class="form-group col-md">
@@ -277,12 +288,18 @@
 
         function updateJoinGuide() {
             $('#joinUrl').val(joinData.url)
+            $('#joinUrlV6').val(joinData.urlV6)
             $('#joinAK').val(joinData.ak)
             QRCode.toCanvas(document.getElementById('joinQR'),
                 joinData.url + '?ak=' + joinData.ak, {}, function (error) {
                     if (error) console.error(error)
                     console.log('generate QR success!')
                 })
+            QRCode.toCanvas(document.getElementById('joinQRV6'),
+            joinData.urlV6 + '?ak=' + joinData.ak, {}, function (error) {
+                if (error) console.error(error)
+                console.log('generate QRV6 success!')
+            })
         }
 
         function onFirstAuthOK() {
