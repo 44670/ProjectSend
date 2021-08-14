@@ -7,12 +7,13 @@ import (
 	"log"
 	"net"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 )
 
 // Get preferred outbound ip of this machine
-func getMyIpAddress() net.IP {
+func getMyIPv4() net.IP {
 	conn, err := net.Dial("udp", "114.114.114.114:80")
 	if err != nil {
 		log.Fatal(err)
@@ -22,6 +23,20 @@ func getMyIpAddress() net.IP {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP
+}
+
+func getMyIPv6() net.IP {
+	s, err := net.InterfaceAddrs()
+	if err != nil {
+		return net.ParseIP("")
+	}
+	for _, a := range s {
+		i := regexp.MustCompile(`(\w+:){7}\w+`).FindString(a.String())
+		if strings.Count(i, ":") == 7 {
+			return net.ParseIP(i)
+		}
+	}
+	return net.ParseIP("")
 }
 
 func encodeBytesToHexString(b []byte) string {

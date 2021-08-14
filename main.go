@@ -14,7 +14,8 @@ import (
 	"sync"
 	"time"
 
-	_ "./statik"
+	_ "main/statik"
+
 	"github.com/rakyll/statik/fs"
 )
 
@@ -39,6 +40,7 @@ type ApiResponse struct {
 
 type AccessInfo struct {
 	Url       string `json:"url"`
+	UrlV6     string `json:"urlV6"`
 	AccessKey string `json:"ak"`
 }
 
@@ -189,7 +191,8 @@ func handleAPI(resp http.ResponseWriter, req *http.Request) {
 	} else if path == "/api/getAccessInfo" {
 		ai := &AccessInfo{}
 		ai.AccessKey = remoteAccessKey
-		ai.Url = fmt.Sprintf("http://%s:%d/", getMyIpAddress(), ListenAtPort)
+		ai.Url = fmt.Sprintf("http://%s:%d/", getMyIPv4(), ListenAtPort)
+		ai.UrlV6 = fmt.Sprintf("http://[%s]:%d/", getMyIPv6(), ListenAtPort)
 		sendAPIResponse(&ApiResponse{0, ai}, resp)
 	} else {
 		if !canManage {
