@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"mime"
 	"net/http"
@@ -13,10 +15,10 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	_ "./statik"
-	"github.com/rakyll/statik/fs"
 )
+
+//go:embed static
+var embedFS embed.FS
 
 const ListenAtPort = 8042
 
@@ -216,14 +218,11 @@ func main() {
 
 	serveMux := http.NewServeMux()
 
-	statikFS, err := fs.New()
-	if err != nil {
-		log.Fatal(err)
-	}
 	if *flagPtrStatic != "" {
 		serveMux.Handle("/", http.FileServer(http.Dir(*flagPtrStatic)))
 	} else {
-		serveMux.Handle("/", http.FileServer(statikFS))
+		eFS, _ := fs.Sub(embedFS, "static")
+		serveMux.Handle("/", http.FileServer(http.FS(eFS)))
 	}
 	serveMux.HandleFunc("/api/", handleAPI)
 
